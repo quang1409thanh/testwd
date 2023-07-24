@@ -1,0 +1,485 @@
+Subject: [PATCH] fix stack, queue for struct, class & pointer for queue stack.
+---
+Index: src/main/java/com/dse/guifx_v3/controllers/TestCaseTreeTableController.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/main/java/com/dse/guifx_v3/controllers/TestCaseTreeTableController.java b/src/main/java/com/dse/guifx_v3/controllers/TestCaseTreeTableController.java
+--- a/src/main/java/com/dse/guifx_v3/controllers/TestCaseTreeTableController.java	(revision f50b61490edc8ecf0e384b43f7b661a6f53f1f00)
++++ b/src/main/java/com/dse/guifx_v3/controllers/TestCaseTreeTableController.java	(revision 830462a8190fcc532df81d70240aed5e6c31a5c1)
+@@ -8,10 +8,13 @@
+ import com.dse.testcase_manager.IDataTestItem;
+ import com.dse.testcase_manager.TestCase;
+ import com.dse.testdata.object.*;
++import com.dse.testdata.object.stl.ListBaseDataNode;
++import com.dse.testdata.object.stl.STLDataNode;
+ import com.dse.util.NodeType;
+ import com.dse.util.SourceConstant;
+ import com.dse.util.TemplateUtils;
+ import com.dse.util.VariableTypeUtils;
++
+ import java.util.ArrayList;
+ 
+ import com.dse.winams.VariableTree;
+@@ -157,10 +160,10 @@
+ 
+     private ScrollBar getVerticalScrollbar() {
+         ScrollBar result = null;
+-        for(Node n : treeTableView.lookupAll(".scroll-bar")) {
+-            if(n instanceof ScrollBar) {
++        for (Node n : treeTableView.lookupAll(".scroll-bar")) {
++            if (n instanceof ScrollBar) {
+                 ScrollBar bar = (ScrollBar) n;
+-                if(bar.getOrientation().equals(Orientation.VERTICAL)) {
++                if (bar.getOrientation().equals(Orientation.VERTICAL)) {
+                     result = bar;
+                 }
+             }
+@@ -272,11 +275,18 @@
+             logger.error(e.getMessage());
+         }
+ 
+-        if (node instanceof StructureDataNode && isShowRelated) {
++        boolean isChildOfListBaseDatanode = false;
++        IDataNode p = node.getParent();
++        while (p != null && !(p instanceof ListBaseDataNode))
++            p = p.getParent();
++
++        if (p != null) isChildOfListBaseDatanode = true;
++
++        if (node instanceof StructureDataNode && isShowRelated && !isChildOfListBaseDatanode) {
+             if (testCase instanceof TestCase) {
+                 IDataNode parent = node.getParent();
+ 
+-                if (!(parent instanceof RootDataNode || parent instanceof UnitUnderTestNode)) {
++                if (!(parent instanceof RootDataNode || parent instanceof UnitUnderTestNode || parent instanceof ListBaseDataNode)) {
+                     try {
+                         List<IVariableNode> filteredAttributes = filterAttribute(((TestCase) testCase).getRelatedAttributeOfStructureVariables(), node);
+                         for (int i = 0; i < children.size(); ++i) {
+@@ -312,7 +322,7 @@
+      * Filter relevant attributes of structure variables based on the related attributes of structure variables.
+      *
+      * @param relatedAttributeOfStructureVariables related attributes of structure variables
+-     * @param node a structure node
++     * @param node                                 a structure node
+      * @return a list of relevant attributes of node
+      */
+     private static List<IVariableNode> filterAttribute(List<SimpleAttributeTree> relatedAttributeOfStructureVariables, DataNode node) {
+@@ -325,7 +335,8 @@
+ 
+             int level = getLevelOfNode(nodesChain);
+             // get last 'level' elements of nodesChain
+-            List<IDataNode> reducedNodesChain = nodesChain = nodesChain.subList(nodesChain.size() - level, nodesChain.size());;
++            List<IDataNode> reducedNodesChain = nodesChain = nodesChain.subList(nodesChain.size() - level, nodesChain.size());
++            ;
+             int finalLevel = level;
+             List<List<String>> relatedAttributesOfEachVariable = relatedAttributeOfStructureVariables.stream()
+                     .map(tree -> tree.getRelatedAttributes(finalLevel + 1, reducedNodesChain))
+@@ -482,9 +493,9 @@
+             return false;
+ 
+         if (dataNode.getParent() instanceof IterationSubprogramNode
+-            && dataNode.getParent().getParent() instanceof NumberOfCallNode) {
++                && dataNode.getParent().getParent() instanceof NumberOfCallNode) {
+             return (dataNode instanceof PointerDataNode
+-                || VariableTypeUtils.isReference(dataNode.getRealType()));
++                    || VariableTypeUtils.isReference(dataNode.getRealType()));
+         }
+ 
+         return false;
+Index: src/main/java/com/dse/project_init/ProjectClone.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/main/java/com/dse/project_init/ProjectClone.java b/src/main/java/com/dse/project_init/ProjectClone.java
+--- a/src/main/java/com/dse/project_init/ProjectClone.java	(revision f50b61490edc8ecf0e384b43f7b661a6f53f1f00)
++++ b/src/main/java/com/dse/project_init/ProjectClone.java	(revision 830462a8190fcc532df81d70240aed5e6c31a5c1)
+@@ -40,6 +40,7 @@
+ import java.nio.file.Paths;
+ import java.util.*;
+ import java.util.concurrent.Callable;
++import java.util.concurrent.ConcurrentSkipListMap;
+ import java.util.concurrent.ExecutorService;
+ import java.util.concurrent.Executors;
+ import java.util.concurrent.atomic.AtomicInteger;
+@@ -54,7 +55,7 @@
+     public static final String MAIN_REGEX = "\\bmain\\b\\s*\\(";
+     protected static final AkaLogger logger = AkaLogger.get(ProjectClone.class);
+     protected static List<String> sLibraries;
+-    protected final Map<String, String> refactors = new TreeMap<>(
++    protected final Map<String, String> refactors = new ConcurrentSkipListMap<>(
+             (o1, o2) -> {
+                 if (o1.length() > o2.length()) {
+                     return -1;
+@@ -465,7 +466,7 @@
+                             + SystemLibrary.LIBRARY_EXTENSION + SpecialCharacter.DOUBLE_QUOTES;
+                     String inclGuardName = SourceConstant.INCLUDE_PREFIX
+                             + entry.getValue().replaceAll("[^\\w]", SpecialCharacter.UNDERSCORE)
+-                                    .toUpperCase();
++                            .toUpperCase();
+                     if (!oldContent.contains(entry.getValue())) {
+                         oldContent = wrapInIncludeGuard(inclGuardName, inclStr) + "\n" + oldContent;
+                     }
+@@ -645,12 +646,13 @@
+ 
+     /**
+      * int A::print() {} -> #ifdef AKA_GMOCK_A
+-     *                      #define A A
+-     *                      #endif;
+-     *                      int A::print() {}
+-     *                      #ifdef AKA_GMOCK_A
+-     *                      #define A MockA
+-     *                      #endif;
++     * #define A A
++     * #endif;
++     * int A::print() {}
++     * #ifdef AKA_GMOCK_A
++     * #define A MockA
++     * #endif;
++     *
+      * @param content
+      * @param fn
+      * @return
+@@ -672,12 +674,13 @@
+ 
+     /**
+      * ex: class A{}; -> #ifdef AKA_GMOCK_A
+-     *                   #define A A
+-     *                   #endif;
+-     *                   class A{};
+-     *                   #ifdef AKA_GMOCK_A
+-     *                   #define A MockA
+-     *                   #endif;
++     * #define A A
++     * #endif;
++     * class A{};
++     * #ifdef AKA_GMOCK_A
++     * #define A MockA
++     * #endif;
++     *
+      * @param classNode
+      */
+     protected void refactorClass(ClassNode classNode) {
+Index: src/main/java/com/dse/testdata/gen/module/AbstractDataTreeExpander.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/main/java/com/dse/testdata/gen/module/AbstractDataTreeExpander.java b/src/main/java/com/dse/testdata/gen/module/AbstractDataTreeExpander.java
+--- a/src/main/java/com/dse/testdata/gen/module/AbstractDataTreeExpander.java	(revision f50b61490edc8ecf0e384b43f7b661a6f53f1f00)
++++ b/src/main/java/com/dse/testdata/gen/module/AbstractDataTreeExpander.java	(revision 830462a8190fcc532df81d70240aed5e6c31a5c1)
+@@ -128,6 +128,8 @@
+                 for (int i = 0; i < size /*&& size <= MAX_ARRAY_SIZE*/; i++) {
+                     if (node instanceof PointerStructureDataNode)
+                         generateArrayItemInStructureVariable(node.getName() + "[" + i + "]", node);
++                    else if (node instanceof PointerSTLDataNode)
++                        generateArrayItemInStructureVariable(node.getName() + "[" + i + "]", node);
+                     else
+                         generateArrayItemInBasicVariable(node.getName() + "[" + i + "]", node);
+                 }
+@@ -175,7 +177,7 @@
+         } else if (node instanceof AfterSet) {
+             int value = Integer.parseInt(((AfterSet) node).getValue());
+             for (int i = 0; i < value; i++) {
+-                AfterNode afterNode = new AfterNode("After_" + (i+1));
++                AfterNode afterNode = new AfterNode("After_" + (i + 1));
+                 afterNode.setParent(node);
+                 node.addChild(afterNode);
+             }
+@@ -490,10 +492,6 @@
+         v.setName(element);
+         v.setParent(currentVar);
+ 
+-//        if (skipTypeResolver) {
+-        v.setCorrespondingNode(currentVar.getCorrespondingNode());
+-//        }
+-
+         String rType = getRawType(currentParent);
+         if (TemplateUtils.isTemplate(rType)) {
+             int index = rType.lastIndexOf(TemplateUtils.CLOSE_TEMPLATE_ARG) + 1;
+@@ -509,6 +507,11 @@
+ //        v.setCoreType(VariableTypeUtils.getTemplateClassCoreType(rType));
+         v.setReducedRawType(rType);
+ 
++        if (currentParent instanceof ListBaseDataNode) {
++            v.setCorrespondingNode(v.resolveCoreType());
++        } else {
++            v.setCorrespondingNode(currentVar.getCorrespondingNode());
++        }
+         // STEP 2.
+         ValueDataNode child;
+         child = new InitialArgTreeGen().genInitialTree(v, currentParent);
+Index: src/main/java/com/dse/testdata/gen/module/type/PointerTypeInitiation.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/main/java/com/dse/testdata/gen/module/type/PointerTypeInitiation.java b/src/main/java/com/dse/testdata/gen/module/type/PointerTypeInitiation.java
+--- a/src/main/java/com/dse/testdata/gen/module/type/PointerTypeInitiation.java	(revision f50b61490edc8ecf0e384b43f7b661a6f53f1f00)
++++ b/src/main/java/com/dse/testdata/gen/module/type/PointerTypeInitiation.java	(revision 830462a8190fcc532df81d70240aed5e6c31a5c1)
+@@ -3,8 +3,10 @@
+ import com.dse.parser.object.ExternalVariableNode;
+ import com.dse.parser.object.VariableNode;
+ import com.dse.testdata.object.*;
++import com.dse.testdata.object.stl.*;
+ import com.dse.util.TemplateUtils;
+ import com.dse.util.VariableTypeUtils;
++import org.reactfx.value.Var;
+ 
+ /**
+  * Khoi tao bien dau vao la kieu con tro bac 1
+@@ -35,6 +37,9 @@
+             child = new PointerStringDataNode();
+         else if (VariableTypeUtils.isStructureMultiLevel(reduceRawType))
+             child = new PointerStructureDataNode();
++            // for ListBaseDataNode ....
++        else if (VariableTypeUtils.isTemplateStructureSimple(reduceRawType))
++            child = new PointerSTLDataNode();
+         else
+             child = new OtherUnresolvedDataNode();
+ 
+Index: src/main/java/com/dse/testdata/object/ClassDataNode.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/main/java/com/dse/testdata/object/ClassDataNode.java b/src/main/java/com/dse/testdata/object/ClassDataNode.java
+--- a/src/main/java/com/dse/testdata/object/ClassDataNode.java	(revision f50b61490edc8ecf0e384b43f7b661a6f53f1f00)
++++ b/src/main/java/com/dse/testdata/object/ClassDataNode.java	(revision 830462a8190fcc532df81d70240aed5e6c31a5c1)
+@@ -5,6 +5,7 @@
+ import com.dse.parser.object.INode;
+ import com.dse.resolver.DeclSpecSearcher;
+ import com.dse.search.Search;
++import com.dse.util.SpecialCharacter;
+ import com.dse.util.TemplateUtils;
+ import com.dse.util.VariableTypeUtils;
+ import org.eclipse.cdt.core.dom.ast.IASTDeclSpecifier;
+@@ -21,4 +22,14 @@
+     protected ISubStructOrClassDataNode createSubStructureDataNode() {
+         return new SubClassDataNode();
+     }
++
++    @Override
++    public String getInputForGoogleTest(boolean isDeclared) throws Exception {
++        String input = "";
++        if (isSTLListBaseElement()) {
++            input += SpecialCharacter.LINE_BREAK + super.getInputForGoogleTest(!isDeclared);
++        }
++        return input + SpecialCharacter.LINE_BREAK + super.getInputForGoogleTest(isDeclared);
++    }
++
+ }
+\ No newline at end of file
+Index: src/main/java/com/dse/testdata/object/PointerDataNode.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/main/java/com/dse/testdata/object/PointerDataNode.java b/src/main/java/com/dse/testdata/object/PointerDataNode.java
+--- a/src/main/java/com/dse/testdata/object/PointerDataNode.java	(revision f50b61490edc8ecf0e384b43f7b661a6f53f1f00)
++++ b/src/main/java/com/dse/testdata/object/PointerDataNode.java	(revision 830462a8190fcc532df81d70240aed5e6c31a5c1)
+@@ -12,6 +12,7 @@
+ import com.dse.search.condition.StructNodeCondition;
+ import com.dse.testdata.comparable.*;
+ import com.dse.util.SourceConstant;
++import com.dse.testdata.object.stl.ListBaseDataNode;
+ import com.dse.util.SpecialCharacter;
+ import com.dse.util.Utils;
+ import com.dse.util.VariableTypeUtils;
+@@ -116,7 +117,7 @@
+ 
+ 	/**
+ 	 * Reformat memory allocation for incomplete built-in data types
+-	 * 
++	 *
+ 	 * @param allocation the previous allocation
+ 	 * @param type       the incomplete built-in data type
+ 	 * @return the reformatted allocation
+@@ -131,7 +132,7 @@
+ 		return allocation;
+ 	}
+ 
+-	private String getCInput(boolean isDeclared) throws Exception {
++	protected String getCInput(boolean isDeclared) throws Exception {
+ 		String input = "";
+ 		String allocation = "";
+ 
+@@ -221,16 +222,18 @@
+ 		return input + SpecialCharacter.LINE_BREAK;
+ 	}
+ 
+-	private String getCppInput(boolean isDeclared) throws Exception {
++	protected String getCppInput(boolean isDeclared) throws Exception {
+ 		String input = "";
+ 		String allocation = "";
+ 		if (!isPassingVariable() || (isPassingVariable() && isDeclared)) {
+ 			String type = VariableTypeUtils
+-					.deleteStorageClassesExceptConst(getRawType().replace(IDataNode.REFERENCE_OPERATOR, ""));
++					.deleteStorageClassesExceptConst(
++							VariableTypeUtils.getFullRawType(getCorrespondingVar())
++									.replace(IDataNode.REFERENCE_OPERATOR, ""));
+ 
+ 			String coreType = "";
+ 			if (getChildren() != null && !getChildren().isEmpty())
+-				coreType = ((ValueDataNode) getChildren().get(0)).getRawType();
++				coreType = VariableTypeUtils.getFullRawType(((ValueDataNode) getChildren().get(0)).getCorrespondingVar());
+ 			else
+ 				coreType = type.substring(0, type.lastIndexOf('*'));
+ 
+Index: src/main/java/com/dse/testdata/object/PointerSTLDataNode.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/main/java/com/dse/testdata/object/PointerSTLDataNode.java b/src/main/java/com/dse/testdata/object/PointerSTLDataNode.java
+new file mode 100644
+--- /dev/null	(revision 830462a8190fcc532df81d70240aed5e6c31a5c1)
++++ b/src/main/java/com/dse/testdata/object/PointerSTLDataNode.java	(revision 830462a8190fcc532df81d70240aed5e6c31a5c1)
+@@ -0,0 +1,69 @@
++package com.dse.testdata.object;
++
++;
++import com.dse.util.SpecialCharacter;
++import com.dse.util.VariableTypeUtils;
++
++public class PointerSTLDataNode extends PointerDataNode {
++
++    @Override
++    protected String getCppInput(boolean isDeclared) throws Exception {
++        String input = "";
++        String allocation = "";
++        if (!isPassingVariable() || (isPassingVariable() && isDeclared)) {
++            String type = VariableTypeUtils
++                    .deleteStorageClassesExceptConst(
++                            VariableTypeUtils.getFullRawType(getCorrespondingVar())
++                                    .replace(IDataNode.REFERENCE_OPERATOR, ""));
++
++            String coreType = "";
++            if (getChildren() != null && !getChildren().isEmpty())
++                coreType = VariableTypeUtils.getFullRawType(((ValueDataNode) getChildren().get(0)).getCorrespondingVar());
++            else
++                coreType = type.substring(0, type.lastIndexOf('*'));
++
++            if (isExternel())
++                type = "";
++
++            String name = getVituralName();
++            int size = getAllocatedSize();
++
++            if (isPassingVariable() || isSTLListBaseElement() || isInConstructor() || isGlobalExpectedValue()
++                    || isSutExpectedArgument()) {
++                if (this.isNotNull()) {
++                    allocation = String.format("%s %s = new %s[%d];", type, name, coreType, size);
++                } else {
++                    allocation = String.format("%s %s = "
++                            + IDataNode.NULL_POINTER_IN_CPP
++                            + SpecialCharacter.END_OF_STATEMENT, type, name);
++                }
++            } else if (isArrayElement() || isAttribute()) {
++                if (this.isNotNull())
++                    allocation = String.format("%s = new %s[%d];", name, coreType, size);
++                else
++                    allocation = String.format("%s = "
++                            + IDataNode.NULL_POINTER_IN_CPP
++                            + SpecialCharacter.END_OF_STATEMENT, name);
++            } else if (isVoidPointerValue()) {
++                if (this.isNotNull())
++                    allocation = String.format("%s %s = new %s[%d];", type, name, coreType, size);
++                else {
++                    allocation = String.format(
++                            "%s %s = " + IDataNode.NULL_POINTER_IN_C + SpecialCharacter.END_OF_STATEMENT,
++                            type, this.getVituralName());
++                }
++            } else {
++                if (this.isNotNull())
++                    allocation = String.format("%s = new %s[%d];", name, coreType, size);
++                else
++                    allocation = name + " = " + IDataNode.NULL_POINTER_IN_CPP + SpecialCharacter.END_OF_STATEMENT;
++            }
++
++            input = reformatAllocationForIncompleteTypes(allocation, type);
++        }
++
++        return input + SpecialCharacter.LINE_BREAK;
++    }
++
++
++}
+Index: src/main/java/com/dse/testdata/object/StructDataNode.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/main/java/com/dse/testdata/object/StructDataNode.java b/src/main/java/com/dse/testdata/object/StructDataNode.java
+--- a/src/main/java/com/dse/testdata/object/StructDataNode.java	(revision f50b61490edc8ecf0e384b43f7b661a6f53f1f00)
++++ b/src/main/java/com/dse/testdata/object/StructDataNode.java	(revision 830462a8190fcc532df81d70240aed5e6c31a5c1)
+@@ -78,6 +78,9 @@
+             } else if (isVoidPointerValue()) {
+                 input += typeVar + " " + this.getVituralName() + SpecialCharacter.END_OF_STATEMENT;
+             }
++            if(isSTLListBaseElement()){
++                input += SpecialCharacter.LINE_BREAK + super.getInputForGoogleTest(!isDeclared);
++            }
+         }
+ 
+         return input + SpecialCharacter.LINE_BREAK + super.getInputForGoogleTest(isDeclared);
+@@ -119,6 +122,10 @@
+             } else if (isVoidPointerValue()) {
+                 input += typeVar + " " + this.getVituralName() + SpecialCharacter.END_OF_STATEMENT;
+             }
++            // Khởi tạo các đối tượng nếu thuộc kiểu isSTLListBaseElement
++            if(isSTLListBaseElement()){
++                input += SpecialCharacter.LINE_BREAK + super.getInputForGoogleTest(!isDeclared);
++            }
+         }
+ 
+         return input + SpecialCharacter.LINE_BREAK + super.getInputForGoogleTest(isDeclared);
+Index: src/main/java/com/dse/testdata/object/stl/ListBaseDataNode.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/main/java/com/dse/testdata/object/stl/ListBaseDataNode.java b/src/main/java/com/dse/testdata/object/stl/ListBaseDataNode.java
+--- a/src/main/java/com/dse/testdata/object/stl/ListBaseDataNode.java	(revision f50b61490edc8ecf0e384b43f7b661a6f53f1f00)
++++ b/src/main/java/com/dse/testdata/object/stl/ListBaseDataNode.java	(revision 830462a8190fcc532df81d70240aed5e6c31a5c1)
+@@ -49,8 +49,8 @@
+     @Override
+     public String getInputForGoogleTest(boolean isDeclared) throws Exception {
+ 
+-        String declaration = "";
+-        if(!isPassingVariable() || (isPassingVariable() && isDeclared) ){
++        StringBuilder declaration = new StringBuilder();
++        if (!isPassingVariable() || (isPassingVariable() && isDeclared)) {
+             String type = VariableTypeUtils
+                     .deleteStorageClassesExceptConst(this.getRawType().replace(IDataNode.REFERENCE_OPERATOR, ""));
+ 
+@@ -63,8 +63,7 @@
+                 type = "";
+ 
+             if (!isAttribute() && !isArrayElement()) {
+-                declaration += type + SpecialCharacter.SPACE + getVituralName()
+-                        + SpecialCharacter.END_OF_STATEMENT + SpecialCharacter.LINE_BREAK;
++                declaration.append(type).append(SpecialCharacter.SPACE).append(getVituralName()).append(SpecialCharacter.END_OF_STATEMENT).append(SpecialCharacter.LINE_BREAK);
+             }
+ 
+             List<IDataNode> children = new ArrayList<>(getChildren());
+@@ -76,14 +75,12 @@
+ //            declaration += "//" + child.getClass().getSimpleName() + SpecialCharacter.SPACE
+ //                    + child.getName() + SpecialCharacter.LINE_BREAK;
+ 
+-                declaration += child.getInputForGoogleTest(isDeclared) + SpecialCharacter.LINE_BREAK;
+-                declaration += getVituralName() + SpecialCharacter.DOT + this.getPushMethod()
+-                        + "(" + child.getVituralName() + ")"
+-                        + SpecialCharacter.END_OF_STATEMENT + SpecialCharacter.LINE_BREAK;
++                declaration.append(child.getInputForGoogleTest(isDeclared)).append(SpecialCharacter.LINE_BREAK);
++                declaration.append(getVituralName()).append(SpecialCharacter.DOT).append(this.getPushMethod()).append("(").append(child.getVituralName()).append(")").append(SpecialCharacter.END_OF_STATEMENT).append(SpecialCharacter.LINE_BREAK);
+             }
+         }
+ 
+-        return declaration;
++        return declaration.toString();
+     }
+ 
+ //    @Override
